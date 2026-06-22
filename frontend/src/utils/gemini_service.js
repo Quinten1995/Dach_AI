@@ -1,10 +1,10 @@
 /**
- * Gemini API Service — temporärer Ersatz für Claude API
+ * OpenRouter API Service — temporärer Ersatz für Claude API
  * Wird ersetzt sobald Anthropic API Key da ist
  */
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`
+const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 const SYSTEM_PROMPT = `Du bist ein erfahrener Dachdecker-Meister mit 30 Jahren Berufserfahrung.
 Aus Fotos einer Besichtigung und einer kurzen Beschreibung erstellst du ein strukturiertes Baustellenprotokoll.
@@ -54,55 +54,57 @@ Antworte NUR mit diesem JSON (keine Backticks, kein Markdown):
 async function imageToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(reader.result.split(',')[1])
+    reader.onload = () => resolve(reader.result)
     reader.onerror = reject
     reader.readAsDataURL(file)
   })
 }
 
 export async function analysiereBestellung(fotos, kunde, adresse, notiz) {
-  // Bilder vorbereiten
-  const bildParts = []
+  const content = []
+
+  // Fotos als base64 hinzufügen
   for (const foto of fotos.slice(0, 5)) {
     const base64 = await imageToBase64(foto.file)
-    bildParts.push({
-      inlineData: {
-        mimeType: foto.file.type || 'image/jpeg',
-        data: base64
-      }
-    })
-    bildParts.push({
-      text: `Foto ${bildParts.length / 2 + 0.5} von ${Math.min(fotos.length, 5)}`
+    content.push({
+      type: 'image_url',
+      image_url: { url: base64 }
     })
   }
 
-  const response = await fetch(GEMINI_URL, {
+  // Text-Prompt
+  content.push({
+    type: 'text',
+    text: buildPrompt(kunde, adresse, notiz)
+  })
+
+  const response = await fetch(OPENROUTER_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'HTTP-Referer': 'https://dach-ai.vercel.app',
+      'X-Title': 'DachProfi AI',
+    },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [{
-        parts: [
-          ...bildParts,
-          { text: buildPrompt(kunde, adresse, notiz) }
-        ]
-      }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 4096,
-      }
+      model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content }
+      ],
+      temperature: 0.2,
+      max_tokens: 4096,
     })
   })
 
   if (!response.ok) {
     const err = await response.json()
-    throw new Error(err.error?.message || 'Gemini API Fehler')
+    throw new Error(err.error?.message || 'OpenRouter API Fehler')
   }
 
   const data = await response.json()
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  const rawText = data.choices?.[0]?.message?.content || ''
 
-  // JSON extrahieren
   const clean = rawText.replace(/```json|```/g, '').trim()
   try {
     return JSON.parse(clean)
