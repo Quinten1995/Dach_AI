@@ -87,7 +87,7 @@ export async function analysiereBestellung(fotos, kunde, adresse, notiz) {
       'X-Title': 'DachProfi AI',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
+      model: 'meta-llama/llama-3.2-11b-vision-instruct',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content }
