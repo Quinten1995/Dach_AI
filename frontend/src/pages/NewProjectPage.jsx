@@ -86,7 +86,7 @@ export default function NewProjectPage() {
     try {
       const { data: projekt, error: projektError } = await supabase
         .from('projekte')
-        .insert({ kunde, adresse, user_id: user.id, status: 'entwurf' })
+        .insert({ kunde, adresse, user_id: user.id, status: 'entwurf', notiz })
         .select()
         .single()
 
@@ -121,7 +121,7 @@ export default function NewProjectPage() {
       setAnalyseStatus('💾 Wird gespeichert…')
       const { data: projekt, error: projektError } = await supabase
         .from('projekte')
-        .insert({ kunde, adresse, user_id: user.id, status: 'entwurf', protokoll })
+        .insert({ kunde, adresse, user_id: user.id, status: 'entwurf', protokoll, notiz })
         .select()
         .single()
 
