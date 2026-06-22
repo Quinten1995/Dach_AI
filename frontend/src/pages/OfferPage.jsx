@@ -1,67 +1,103 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Plus, Trash2, Download, Send } from 'lucide-react'
-
-// Gleiche Mock-Daten (später aus State/DB)
-const initPositionen = [
-  { id: 1, bezeichnung: 'Ziegelwechsel Biberschwanz, inkl. Mörtel', einheit: 'Stk', menge: 35, ep: 18 },
-  { id: 2, bezeichnung: 'Firstziegel neu verlegen, Mörtel erneuern', einheit: 'm', menge: 12, ep: 45 },
-  { id: 3, bezeichnung: 'Ortgangblech Titanzink erneuern', einheit: 'm', menge: 8, ep: 38 },
-  { id: 4, bezeichnung: 'Dachrinne Titanzink DN 125 erneuern', einheit: 'm', menge: 14, ep: 55 },
-  { id: 5, bezeichnung: 'Fallrohr Titanzink DN 80, inkl. Schellen', einheit: 'm', menge: 4, ep: 42 },
-  { id: 6, bezeichnung: 'Dachfenster-Anschluss neu abdichten', einheit: 'Stk', menge: 1, ep: 280 },
-  { id: 7, bezeichnung: 'Gerüststellung und -abbau', einheit: 'pauschal', menge: 1, ep: 850 },
-  { id: 8, bezeichnung: 'Anfahrtspauschale', einheit: 'pauschal', menge: 1, ep: 80 },
-]
+import { ChevronLeft, Plus, Trash2, Download, Loader2 } from 'lucide-react'
+import { supabase } from '../utils/supabase'
 
 export default function OfferPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [positionen, setPositionen] = useState(initPositionen)
+  const [projekt, setProjekt] = useState(null)
+  const [positionen, setPositionen] = useState([])
   const [anmerkung, setAnmerkung] = useState('')
-  const [downloading, setDownloading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    async function ladeProjekt() {
+      const { data, error } = await supabase
+        .from('projekte')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (!error && data) {
+        setProjekt(data)
+        // Positionen aus protokoll laden
+        const pos = data.protokoll?.positionen
+          ?.flatMap((k, ki) =>
+            (k.pos || []).map((p, pi) => ({
+              id: `${ki}-${pi}`,
+              bezeichnung: p.bezeichnung || '',
+              einheit: p.einheit || 'm²',
+              menge: p.menge || 0,
+              ep: p.ep || 0,
+            }))
+          ) || []
+        setPositionen(pos)
+      }
+      setLoading(false)
+    }
+    ladeProjekt()
+  }, [id])
 
   const update = (posId, field, value) => {
     setPositionen((prev) =>
       prev.map((p) => p.id === posId ? { ...p, [field]: value } : p)
     )
+    setSaved(false)
   }
 
   const remove = (posId) => {
     setPositionen((prev) => prev.filter((p) => p.id !== posId))
+    setSaved(false)
   }
 
   const addPosition = () => {
-    const newId = Math.max(...positionen.map((p) => p.id)) + 1
+    const newId = `new-${Date.now()}`
     setPositionen((prev) => [
       ...prev,
       { id: newId, bezeichnung: '', einheit: 'm²', menge: 1, ep: 0 }
     ])
+    setSaved(false)
   }
 
-  const netto = positionen.reduce((sum, p) => sum + (p.menge * p.ep), 0)
+  const speichern = async () => {
+    setSaving(true)
+    // Positionen zurück in protokoll-Format bringen
+    const updatedProtokoll = {
+      ...(projekt.protokoll || {}),
+      positionen: [{
+        kategorie: 'Leistungen',
+        pos: positionen.map((p, i) => ({
+          nr: `${i + 1}`,
+          bezeichnung: p.bezeichnung,
+          einheit: p.einheit,
+          menge: parseFloat(p.menge),
+          ep: parseFloat(p.ep),
+        }))
+      }]
+    }
+
+    const { error } = await supabase
+      .from('projekte')
+      .update({ protokoll: updatedProtokoll, status: 'bearbeitet' })
+      .eq('id', id)
+
+    if (!error) setSaved(true)
+    setSaving(false)
+  }
+
+  const netto = positionen.reduce((sum, p) => sum + (parseFloat(p.menge) * parseFloat(p.ep) || 0), 0)
   const mwst = netto * 0.19
   const brutto = netto + mwst
 
-  const downloadPDF = async () => {
-    setDownloading(true)
-    try {
-      const res = await fetch(`/api/projekt/${id}/pdf`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ positionen, anmerkung }),
-      })
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Angebot_${id}.pdf`
-      a.click()
-    } catch {
-      alert('PDF-Export fehlgeschlagen.')
-    } finally {
-      setDownloading(false)
-    }
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 size={32} className="text-brand-500 animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -69,16 +105,31 @@ export default function OfferPage() {
       {/* Header */}
       <div className="bg-white border-b border-zinc-100 px-4 py-4 pt-safe">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-zinc-500">
+          <button onClick={() => navigate(`/projekt/${id}`)} className="p-2 -ml-2 text-zinc-500">
             <ChevronLeft size={22} />
           </button>
-          <h1 className="font-semibold text-zinc-900">Angebot bearbeiten</h1>
+          <div className="flex-1">
+            <h1 className="font-semibold text-zinc-900">Angebot bearbeiten</h1>
+            {projekt && <p className="text-xs text-zinc-500">{projekt.kunde}</p>}
+          </div>
+          {saved && <span className="text-xs text-green-600 font-medium">Gespeichert ✓</span>}
         </div>
       </div>
 
-      <div className="px-4 py-5 max-w-lg mx-auto space-y-4 pb-32">
+      <div className="px-4 py-5 max-w-lg mx-auto space-y-4 pb-36">
+
+        {/* Keine Positionen */}
+        {positionen.length === 0 && (
+          <div className="card border-2 border-amber-100 bg-amber-50">
+            <p className="text-sm text-amber-700 font-medium mb-1">⏳ Noch keine KI-Positionen</p>
+            <p className="text-xs text-amber-600">
+              Nach der KI-Analyse werden hier automatisch Positionen vorgeschlagen. Du kannst aber auch manuell welche hinzufügen.
+            </p>
+          </div>
+        )}
+
         {/* Positionen */}
-        <h2 className="font-semibold text-zinc-900">Leistungspositionen</h2>
+        {positionen.length > 0 && <h2 className="font-semibold text-zinc-900">Leistungspositionen</h2>}
 
         <div className="space-y-2">
           {positionen.map((pos) => (
@@ -91,10 +142,7 @@ export default function OfferPage() {
                   placeholder="Bezeichnung"
                   className="input flex-1 text-sm py-2"
                 />
-                <button
-                  onClick={() => remove(pos.id)}
-                  className="p-2 text-zinc-400 active:text-red-500 flex-shrink-0"
-                >
+                <button onClick={() => remove(pos.id)} className="p-2 text-zinc-400 active:text-red-500 flex-shrink-0">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -104,18 +152,14 @@ export default function OfferPage() {
                   <input
                     type="number"
                     value={pos.menge}
-                    onChange={(e) => update(pos.id, 'menge', parseFloat(e.target.value) || 0)}
+                    onChange={(e) => update(pos.id, 'menge', e.target.value)}
                     className="input text-sm py-2"
                     min="0"
                   />
                 </div>
                 <div className="w-24">
                   <label className="text-xs text-zinc-500 mb-1 block">Einheit</label>
-                  <select
-                    value={pos.einheit}
-                    onChange={(e) => update(pos.id, 'einheit', e.target.value)}
-                    className="input text-sm py-2"
-                  >
+                  <select value={pos.einheit} onChange={(e) => update(pos.id, 'einheit', e.target.value)} className="input text-sm py-2">
                     {['m²', 'm', 'Stk', 'pauschal', 'Std', 'kg'].map((u) => (
                       <option key={u} value={u}>{u}</option>
                     ))}
@@ -126,7 +170,7 @@ export default function OfferPage() {
                   <input
                     type="number"
                     value={pos.ep}
-                    onChange={(e) => update(pos.id, 'ep', parseFloat(e.target.value) || 0)}
+                    onChange={(e) => update(pos.id, 'ep', e.target.value)}
                     className="input text-sm py-2"
                     min="0"
                     step="0.5"
@@ -135,7 +179,7 @@ export default function OfferPage() {
               </div>
               <div className="flex justify-end">
                 <span className="text-sm font-semibold text-zinc-700">
-                  GP: {(pos.menge * pos.ep).toLocaleString('de-DE')} €
+                  GP: {(parseFloat(pos.menge) * parseFloat(pos.ep) || 0).toLocaleString('de-DE')} €
                 </span>
               </div>
             </div>
@@ -155,11 +199,11 @@ export default function OfferPage() {
 
         {/* Anmerkung */}
         <div>
-          <label className="label">Anmerkung / Bemerkung</label>
+          <label className="label">Anmerkung</label>
           <textarea
             value={anmerkung}
-            onChange={(e) => setAnmerkung(e.target.value)}
-            placeholder="z.B. Ausführung nur bei trockenem Wetter. Gerüst vom Kunden gestellt."
+            onChange={(e) => { setAnmerkung(e.target.value); setSaved(false) }}
+            placeholder="z.B. Ausführung nur bei trockenem Wetter."
             rows={3}
             className="input resize-none"
           />
@@ -187,13 +231,9 @@ export default function OfferPage() {
       {/* Sticky Footer */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-100 pb-safe px-4 py-3">
         <div className="flex gap-3 max-w-lg mx-auto">
-          <button
-            onClick={downloadPDF}
-            disabled={downloading}
-            className="btn-primary flex items-center justify-center gap-2"
-          >
-            <Download size={18} />
-            {downloading ? 'PDF wird erstellt…' : 'PDF herunterladen'}
+          <button onClick={speichern} disabled={saving} className="btn-primary flex items-center justify-center gap-2">
+            {saving ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+            {saving ? 'Wird gespeichert…' : 'Speichern'}
           </button>
         </div>
         <p className="text-xs text-center text-zinc-400 mt-2">

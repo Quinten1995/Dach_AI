@@ -174,9 +174,14 @@ export default function NewProjectPage() {
                 )}
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelect} className="hidden" />
+              {photos.length === 0 && (
+                <div className="mt-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                  <p className="text-xs text-amber-600">💡 Tipp: Mit Fotos wird das Protokoll deutlich genauer.</p>
+                </div>
+              )}
             </div>
 
-            <button onClick={() => setStep(1)} disabled={photos.length === 0 || !kunde} className="btn-primary">
+            <button onClick={() => setStep(1)} disabled={!kunde} className="btn-primary">
               Weiter zur Sprachnotiz →
             </button>
           </div>
