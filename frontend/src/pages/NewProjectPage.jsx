@@ -8,7 +8,7 @@ import { analysiereBestellung } from '../utils/gemini_service'
 
 const MAX_PHOTOS = 5
 const MAX_SECONDS = 90
-const STEPS = ['Fotos', 'Sprachnotiz', 'Analyse']
+const STEPS = ['Fotos', 'Sprachnotiz', 'Fertig']
 
 export default function NewProjectPage() {
   const navigate = useNavigate()
@@ -53,29 +53,22 @@ export default function NewProjectPage() {
       const recorder = new MediaRecorder(stream)
       mediaRecorderRef.current = recorder
       audioChunksRef.current = []
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data)
-      }
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
       recorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
         setAudioBlob(blob)
         stream.getTracks().forEach((t) => t.stop())
       }
-
       recorder.start()
       setRecording(true)
       setRecordingSeconds(0)
-
       timerRef.current = setInterval(() => {
         setRecordingSeconds((s) => {
           if (s >= MAX_SECONDS - 1) { stopRecording(); return s }
           return s + 1
         })
       }, 1000)
-    } catch {
-      alert('Mikrofon-Zugriff verweigert.')
-    }
+    } catch { alert('Mikrofon-Zugriff verweigert.') }
   }
 
   const stopRecording = () => {
@@ -84,16 +77,47 @@ export default function NewProjectPage() {
     setRecording(false)
   }
 
-  const startAnalysis = async () => {
+  // Nur speichern — ohne KI
+  const nurSpeichern = async () => {
+    setStep(2)
+    setAnalyseStatus('💾 Wird gespeichert…')
+    setError('')
+
+    try {
+      const { data: projekt, error: projektError } = await supabase
+        .from('projekte')
+        .insert({ kunde, adresse, user_id: user.id, status: 'entwurf' })
+        .select()
+        .single()
+
+      if (projektError) throw projektError
+
+      // Fotos hochladen
+      if (photos.length > 0) {
+        setAnalyseStatus('📸 Fotos werden hochgeladen…')
+        for (let i = 0; i < photos.length; i++) {
+          const path = `${user.id}/${projekt.id}/foto_${i}.jpg`
+          await supabase.storage.from('fotos').upload(path, photos[i].file)
+          await supabase.from('fotos').insert({ projekt_id: projekt.id, storage_path: path, sort_order: i })
+        }
+      }
+
+      navigate(`/projekt/${projekt.id}`)
+    } catch (err) {
+      setError(`Fehler: ${err.message}`)
+      setStep(1)
+    }
+  }
+
+  // Speichern + KI-Analyse
+  const mitKIAnalyse = async () => {
     setStep(2)
     setError('')
 
     try {
-      // 1. KI-Analyse
       setAnalyseStatus('🔍 Fotos werden analysiert…')
       const protokoll = await analysiereBestellung(photos, kunde, adresse, notiz)
 
-      // 2. Projekt in Supabase speichern
       setAnalyseStatus('💾 Wird gespeichert…')
       const { data: projekt, error: projektError } = await supabase
         .from('projekte')
@@ -103,16 +127,16 @@ export default function NewProjectPage() {
 
       if (projektError) throw projektError
 
-      // 3. Fotos hochladen
-      setAnalyseStatus('📸 Fotos werden hochgeladen…')
-      for (let i = 0; i < photos.length; i++) {
-        const path = `${user.id}/${projekt.id}/foto_${i}.jpg`
-        await supabase.storage.from('fotos').upload(path, photos[i].file)
-        await supabase.from('fotos').insert({ projekt_id: projekt.id, storage_path: path, sort_order: i })
+      if (photos.length > 0) {
+        setAnalyseStatus('📸 Fotos werden hochgeladen…')
+        for (let i = 0; i < photos.length; i++) {
+          const path = `${user.id}/${projekt.id}/foto_${i}.jpg`
+          await supabase.storage.from('fotos').upload(path, photos[i].file)
+          await supabase.from('fotos').insert({ projekt_id: projekt.id, storage_path: path, sort_order: i })
+        }
       }
 
       navigate(`/projekt/${projekt.id}`)
-
     } catch (err) {
       setError(`Fehler: ${err.message}`)
       setStep(1)
@@ -182,7 +206,7 @@ export default function NewProjectPage() {
             </div>
 
             <button onClick={() => setStep(1)} disabled={!kunde} className="btn-primary">
-              Weiter zur Sprachnotiz →
+              Weiter →
             </button>
           </div>
         )}
@@ -195,7 +219,6 @@ export default function NewProjectPage() {
               <p className="text-zinc-400 text-xs">Schäden, Materialien, Besonderheiten, dein erster Eindruck</p>
             </div>
 
-            {/* Textnotiz als Fallback */}
             <div>
               <label className="label">Notiz (optional)</label>
               <textarea
@@ -217,7 +240,6 @@ export default function NewProjectPage() {
               >
                 {audioBlob && !recording ? <CheckCircle size={36} className="text-white" /> : <Mic size={36} className="text-white" />}
               </button>
-
               <div className="text-center">
                 {recording ? (
                   <>
@@ -239,21 +261,24 @@ export default function NewProjectPage() {
 
             <div className="flex gap-3">
               <button onClick={() => setStep(0)} className="btn-secondary">Zurück</button>
-              <button onClick={startAnalysis} className="btn-primary flex-1">
-                KI-Analyse starten →
+              <button onClick={nurSpeichern} className="btn-secondary flex-1">
+                Nur speichern
               </button>
             </div>
+            <button onClick={mitKIAnalyse} className="btn-primary w-full">
+              KI-Analyse starten →
+            </button>
           </div>
         )}
 
-        {/* Schritt 2: Analyse läuft */}
+        {/* Schritt 2: Läuft */}
         {step === 2 && (
           <div className="flex flex-col items-center justify-center py-20 gap-6">
             <div className="w-20 h-20 bg-brand-50 rounded-full flex items-center justify-center">
               <Loader2 size={36} className="text-brand-500 animate-spin" />
             </div>
             <div className="text-center">
-              <p className="font-semibold text-zinc-900 text-lg">KI analysiert…</p>
+              <p className="font-semibold text-zinc-900 text-lg">Einen Moment…</p>
               <p className="text-zinc-500 text-sm mt-1">{analyseStatus}</p>
             </div>
           </div>

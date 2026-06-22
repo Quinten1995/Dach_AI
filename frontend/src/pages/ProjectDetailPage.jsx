@@ -62,7 +62,7 @@ export default function ProjectDetailPage() {
         <div className="flex gap-2">
           <button
             onClick={() => navigate(`/projekt/${id}/angebot`)}
-            disabled={positionen.length === 0}
+            
             className="btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
           >
             <FileText size={16} />
