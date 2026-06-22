@@ -4,6 +4,7 @@ import { Camera, Mic, X, ChevronLeft, Loader2, CheckCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { supabase } from '../utils/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { analysiereBestellung } from '../utils/gemini_service'
 
 const MAX_PHOTOS = 5
 const MAX_SECONDS = 90
@@ -23,7 +24,9 @@ export default function NewProjectPage() {
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [kunde, setKunde] = useState('')
   const [adresse, setAdresse] = useState('')
+  const [notiz, setNotiz] = useState('')
   const [error, setError] = useState('')
+  const [analyseStatus, setAnalyseStatus] = useState('')
   const timerRef = useRef(null)
 
   const handleFileSelect = (e) => {
@@ -86,28 +89,32 @@ export default function NewProjectPage() {
     setError('')
 
     try {
-      // 1. Projekt in Supabase anlegen
+      // 1. KI-Analyse
+      setAnalyseStatus('🔍 Fotos werden analysiert…')
+      const protokoll = await analysiereBestellung(photos, kunde, adresse, notiz)
+
+      // 2. Projekt in Supabase speichern
+      setAnalyseStatus('💾 Wird gespeichert…')
       const { data: projekt, error: projektError } = await supabase
         .from('projekte')
-        .insert({ kunde, adresse, user_id: user.id, status: 'entwurf' })
+        .insert({ kunde, adresse, user_id: user.id, status: 'entwurf', protokoll })
         .select()
         .single()
 
       if (projektError) throw projektError
 
-      // 2. Fotos in Supabase Storage hochladen
+      // 3. Fotos hochladen
+      setAnalyseStatus('📸 Fotos werden hochgeladen…')
       for (let i = 0; i < photos.length; i++) {
-        const foto = photos[i]
         const path = `${user.id}/${projekt.id}/foto_${i}.jpg`
-        await supabase.storage.from('fotos').upload(path, foto.file)
+        await supabase.storage.from('fotos').upload(path, photos[i].file)
         await supabase.from('fotos').insert({ projekt_id: projekt.id, storage_path: path, sort_order: i })
       }
 
-      // 3. Weiterleiten zum Projekt (KI-Analyse kommt später)
       navigate(`/projekt/${projekt.id}`)
 
     } catch (err) {
-      setError('Fehler beim Speichern. Bitte erneut versuchen.')
+      setError(`Fehler: ${err.message}`)
       setStep(1)
     }
   }
@@ -134,6 +141,7 @@ export default function NewProjectPage() {
 
       <div className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
 
+        {/* Schritt 0: Fotos */}
         {step === 0 && (
           <div className="space-y-6">
             <div className="space-y-4">
@@ -174,6 +182,7 @@ export default function NewProjectPage() {
           </div>
         )}
 
+        {/* Schritt 1: Sprachnotiz */}
         {step === 1 && (
           <div className="space-y-6">
             <div className="text-center">
@@ -181,7 +190,19 @@ export default function NewProjectPage() {
               <p className="text-zinc-400 text-xs">Schäden, Materialien, Besonderheiten, dein erster Eindruck</p>
             </div>
 
-            <div className="flex flex-col items-center gap-4 py-8">
+            {/* Textnotiz als Fallback */}
+            <div>
+              <label className="label">Notiz (optional)</label>
+              <textarea
+                value={notiz}
+                onChange={(e) => setNotiz(e.target.value)}
+                placeholder="z.B. Rinne rechts durchgerostet, First muss neu, ca. 180m² Satteldach..."
+                rows={3}
+                className="input resize-none"
+              />
+            </div>
+
+            <div className="flex flex-col items-center gap-4 py-4">
               <button
                 onClick={recording ? stopRecording : startRecording}
                 className={clsx('w-24 h-24 rounded-full flex items-center justify-center transition-all',
@@ -200,11 +221,11 @@ export default function NewProjectPage() {
                   </>
                 ) : audioBlob ? (
                   <>
-                    <p className="text-green-600 font-medium">Aufnahme gespeichert ✓</p>
+                    <p className="text-green-600 font-medium">Sprachnotiz aufgenommen ✓</p>
                     <button onClick={() => { setAudioBlob(null); setRecordingSeconds(0) }} className="text-sm text-zinc-400 mt-1 underline">Neu aufnehmen</button>
                   </>
                 ) : (
-                  <p className="text-sm text-zinc-500">Tippen zum Starten (max. {MAX_SECONDS}s)</p>
+                  <p className="text-sm text-zinc-500">Oder Sprachnotiz aufnehmen (max. {MAX_SECONDS}s)</p>
                 )}
               </div>
             </div>
@@ -214,20 +235,21 @@ export default function NewProjectPage() {
             <div className="flex gap-3">
               <button onClick={() => setStep(0)} className="btn-secondary">Zurück</button>
               <button onClick={startAnalysis} className="btn-primary flex-1">
-                Speichern →
+                KI-Analyse starten →
               </button>
             </div>
           </div>
         )}
 
+        {/* Schritt 2: Analyse läuft */}
         {step === 2 && (
           <div className="flex flex-col items-center justify-center py-20 gap-6">
             <div className="w-20 h-20 bg-brand-50 rounded-full flex items-center justify-center">
               <Loader2 size={36} className="text-brand-500 animate-spin" />
             </div>
             <div className="text-center">
-              <p className="font-semibold text-zinc-900 text-lg">Wird gespeichert…</p>
-              <p className="text-zinc-500 text-sm mt-1">Fotos werden hochgeladen</p>
+              <p className="font-semibold text-zinc-900 text-lg">KI analysiert…</p>
+              <p className="text-zinc-500 text-sm mt-1">{analyseStatus}</p>
             </div>
           </div>
         )}
