@@ -1,35 +1,36 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, FileText, Clock, CheckCircle } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
-
-// Platzhalter-Daten bis Supabase angebunden
-const MOCK_PROJECTS = [
-  {
-    id: '1',
-    kunde: 'Familie Maier',
-    adresse: 'Hauptstr. 12, 80331 München',
-    status: 'entwurf',
-    datum: '2024-01-15',
-    betrag: 4850,
-  },
-  {
-    id: '2',
-    kunde: 'Wohnbau GmbH',
-    adresse: 'Industrieweg 4, 81379 München',
-    status: 'fertig',
-    datum: '2024-01-10',
-    betrag: 12400,
-  },
-]
+import { supabase } from '../utils/supabase'
 
 const STATUS_CONFIG = {
-  entwurf: { label: 'Entwurf',  color: 'bg-amber-100 text-amber-700', icon: Clock },
-  fertig:  { label: 'Freigabe bereit', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  entwurf:     { label: 'Entwurf',          color: 'bg-amber-100 text-amber-700',  icon: Clock },
+  bearbeitet:  { label: 'Bearbeitet',        color: 'bg-blue-100 text-blue-700',    icon: Clock },
+  freigegeben: { label: 'Freigabe bereit',   color: 'bg-green-100 text-green-700',  icon: CheckCircle },
 }
 
 export default function DashboardPage() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
+  const [projekte, setProjekte] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return
+
+    async function ladeProjekte() {
+      const { data, error } = await supabase
+        .from('projekte')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (!error) setProjekte(data || [])
+      setLoading(false)
+    }
+
+    ladeProjekte()
+  }, [user])
 
   return (
     <div className="px-4 pt-12 pb-4 max-w-lg mx-auto">
@@ -38,7 +39,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Meine Projekte</h1>
           <p className="text-sm text-zinc-500 mt-0.5">
-            {MOCK_PROJECTS.length} Besichtigungen
+            {loading ? '…' : `${projekte.length} Besichtigungen`}
           </p>
         </div>
         <button
@@ -65,7 +66,11 @@ export default function DashboardPage() {
       </button>
 
       {/* Projektliste */}
-      {MOCK_PROJECTS.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : projekte.length === 0 ? (
         <div className="text-center py-16 text-zinc-400">
           <FileText size={40} className="mx-auto mb-3 opacity-30" />
           <p className="font-medium">Noch keine Projekte</p>
@@ -73,9 +78,12 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {MOCK_PROJECTS.map((project) => {
-            const status = STATUS_CONFIG[project.status]
+          {projekte.map((project) => {
+            const status = STATUS_CONFIG[project.status] || STATUS_CONFIG.entwurf
             const StatusIcon = status.icon
+            const betrag = project.protokoll?.positionen
+              ?.flatMap(k => k.pos || [])
+              ?.reduce((sum, p) => sum + (p.menge * p.ep || 0), 0) || 0
 
             return (
               <button
@@ -89,11 +97,13 @@ export default function DashboardPage() {
                     <p className="text-sm text-zinc-500 truncate mt-0.5">{project.adresse}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="font-semibold text-zinc-900">
-                      {project.betrag.toLocaleString('de-DE')} €
-                    </p>
+                    {betrag > 0 && (
+                      <p className="font-semibold text-zinc-900">
+                        {betrag.toLocaleString('de-DE')} €
+                      </p>
+                    )}
                     <p className="text-xs text-zinc-400 mt-0.5">
-                      {new Date(project.datum).toLocaleDateString('de-DE', {
+                      {new Date(project.created_at).toLocaleDateString('de-DE', {
                         day: '2-digit', month: '2-digit'
                       })}
                     </p>
