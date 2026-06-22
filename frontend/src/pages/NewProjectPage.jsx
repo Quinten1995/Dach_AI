@@ -165,7 +165,7 @@ export default function NewProjectPage() {
                   </button>
                 )}
               </div>
-              <input ref={fileInputRef} type="file" accept="image/*" capture="environment" multiple onChange={handleFileSelect} className="hidden" />
+              <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelect} className="hidden" />
             </div>
 
             <button onClick={() => setStep(1)} disabled={photos.length === 0 || !kunde} className="btn-primary">
