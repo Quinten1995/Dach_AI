@@ -6,9 +6,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'prompt',
-      devOptions: {
-        enabled: false,
+      registerType: 'autoUpdate',
+      workbox: {
+        navigateFallback: null,
+        globPatterns: [],
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
