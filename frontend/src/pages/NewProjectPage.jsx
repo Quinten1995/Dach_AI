@@ -213,7 +213,7 @@ export default function NewProjectPage() {
 
             <div className="flex gap-3">
               <button onClick={() => setStep(0)} className="btn-secondary">Zurück</button>
-              <button onClick={startAnalysis} disabled={!audioBlob} className="btn-primary flex-1">
+              <button onClick={startAnalysis} className="btn-primary flex-1">
                 Speichern →
               </button>
             </div>
