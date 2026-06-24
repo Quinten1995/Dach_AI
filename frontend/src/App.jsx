@@ -11,7 +11,6 @@ import OfferPage from './pages/OfferPage'
 // Layout
 import AppShell from './components/layout/AppShell'
 
-// Geschützte Route
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
 
@@ -40,7 +39,7 @@ export default function App() {
         {/* Öffentlich */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Geschützt – mit App Shell (Bottom Nav) */}
+        {/* Dashboard – mit Bottom Nav */}
         <Route
           path="/"
           element={
@@ -50,10 +49,12 @@ export default function App() {
           }
         >
           <Route index element={<DashboardPage />} />
-          <Route path="neu" element={<NewProjectPage />} />
-          <Route path="projekt/:id" element={<ProjectDetailPage />} />
-          <Route path="projekt/:id/angebot" element={<OfferPage />} />
         </Route>
+
+        {/* Ohne Bottom Nav */}
+        <Route path="/neu" element={<ProtectedRoute><NewProjectPage /></ProtectedRoute>} />
+        <Route path="/projekt/:id" element={<ProtectedRoute><ProjectDetailPage /></ProtectedRoute>} />
+        <Route path="/projekt/:id/angebot" element={<ProtectedRoute><OfferPage /></ProtectedRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
