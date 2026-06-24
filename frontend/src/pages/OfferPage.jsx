@@ -116,7 +116,7 @@ export default function OfferPage() {
         </div>
       </div>
 
-      <div className="px-4 py-5 max-w-lg mx-auto space-y-4 pb-36">
+      <div className="px-4 py-5 max-w-lg mx-auto space-y-4 pb-52">
 
         {/* Keine Positionen */}
         {positionen.length === 0 && (
