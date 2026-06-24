@@ -14,6 +14,7 @@ export default function NewProjectPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
 
@@ -191,13 +192,21 @@ export default function NewProjectPage() {
                   </div>
                 ))}
                 {photos.length < MAX_PHOTOS && (
-                  <button onClick={() => fileInputRef.current?.click()} className="aspect-square upload-zone rounded-xl">
-                    <Camera size={24} className="text-zinc-400 mb-1" />
-                    <span className="text-xs text-zinc-400">Foto</span>
-                  </button>
+                  <div className="aspect-square upload-zone rounded-xl flex-col gap-1">
+                    <button onClick={() => cameraInputRef.current?.click()} className="flex flex-col items-center gap-1 flex-1 w-full justify-center">
+                      <Camera size={20} className="text-zinc-400" />
+                      <span className="text-xs text-zinc-400">Kamera</span>
+                    </button>
+                    <div className="w-full h-px bg-zinc-200" />
+                    <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-1 flex-1 w-full justify-center">
+                      <span className="text-lg">🖼️</span>
+                      <span className="text-xs text-zinc-400">Galerie</span>
+                    </button>
+                  </div>
                 )}
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelect} className="hidden" />
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple onChange={handleFileSelect} className="hidden" />
               {photos.length === 0 && (
                 <div className="mt-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
                   <p className="text-xs text-amber-600">💡 Tipp: Mit Fotos wird das Protokoll deutlich genauer.</p>
