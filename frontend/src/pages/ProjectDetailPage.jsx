@@ -1,27 +1,41 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, FileText, Download, Loader2 } from 'lucide-react'
+import { ChevronLeft, FileText, Loader2 } from 'lucide-react'
 import { supabase } from '../utils/supabase'
+import { useAuth } from '../hooks/useAuth'
+import { exportPDF } from '../utils/pdf_export'
 
 export default function ProjectDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [projekt, setProjekt] = useState(null)
+  const [profil, setProfil] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   useEffect(() => {
-    async function ladeProjekt() {
-      const { data, error } = await supabase
-        .from('projekte')
-        .select('*')
-        .eq('id', id)
-        .single()
-
-      if (!error) setProjekt(data)
+    async function ladeAlles() {
+      const [{ data: projektData }, { data: profilData }] = await Promise.all([
+        supabase.from('projekte').select('*').eq('id', id).single(),
+        supabase.from('profile').select('*').eq('user_id', user.id).single(),
+      ])
+      if (projektData) setProjekt(projektData)
+      if (profilData) setProfil(profilData)
       setLoading(false)
     }
-    ladeProjekt()
-  }, [id])
+    ladeAlles()
+  }, [id, user])
+
+  const handlePDF = async () => {
+    if (!positionen.length) {
+      alert('Keine Positionen vorhanden — bitte erst KI-Analyse durchführen.')
+      return
+    }
+    setPdfLoading(true)
+    await exportPDF(projekt, positionen, profil, '')
+    setPdfLoading(false)
+  }
 
   if (loading) {
     return (
@@ -40,14 +54,13 @@ export default function ProjectDetailPage() {
     )
   }
 
-  const positionen = projekt.protokoll?.positionen || []
-  const netto = positionen.flatMap(k => k.pos || []).reduce((sum, p) => sum + (p.menge * p.ep || 0), 0)
+  const positionen = projekt.protokoll?.positionen?.flatMap(k => k.pos || []) || []
+  const netto = positionen.reduce((sum, p) => sum + (p.menge * p.ep || 0), 0)
   const mwst = netto * 0.19
   const brutto = netto + mwst
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      {/* Header */}
       <div className="bg-white border-b border-zinc-100 px-4 py-4 pt-safe">
         <div className="flex items-center gap-3 mb-3">
           <button onClick={() => navigate('/')} className="p-2 -ml-2 text-zinc-500">
@@ -62,28 +75,33 @@ export default function ProjectDetailPage() {
         <div className="flex gap-2">
           <button
             onClick={() => navigate(`/projekt/${id}/angebot`)}
-            
-            className="btn-primary py-2.5 text-sm flex items-center justify-center gap-2"
+            className="btn-secondary py-2.5 text-sm flex items-center justify-center gap-2 flex-1"
           >
             <FileText size={16} />
             Angebot bearbeiten
+          </button>
+          <button
+            onClick={handlePDF}
+            disabled={pdfLoading || positionen.length === 0}
+            className="btn-primary py-2.5 text-sm flex items-center justify-center gap-2 flex-1"
+          >
+            {pdfLoading ? <Loader2 size={16} className="animate-spin" /> : '📄'}
+            {pdfLoading ? 'PDF…' : 'PDF erstellen'}
           </button>
         </div>
       </div>
 
       <div className="px-4 py-5 max-w-lg mx-auto space-y-5">
 
-        {/* Noch keine KI-Analyse */}
         {!projekt.protokoll && (
           <div className="card border-2 border-amber-100 bg-amber-50">
             <p className="text-sm text-amber-700 font-medium mb-1">⏳ KI-Analyse ausstehend</p>
             <p className="text-xs text-amber-600">
-              Sobald der API Key eingetragen ist, wird hier automatisch das Baustellenprotokoll generiert.
+              Neue Besichtigung starten um Fotos + Notiz zu analysieren.
             </p>
           </div>
         )}
 
-        {/* Stammdaten */}
         <div className="card">
           <h2 className="font-semibold text-zinc-900 mb-3">Besichtigung</h2>
           <div className="space-y-2 text-sm">
@@ -98,9 +116,7 @@ export default function ProjectDetailPage() {
             <div className="flex justify-between">
               <span className="text-zinc-500">Datum</span>
               <span className="font-medium">
-                {new Date(projekt.created_at).toLocaleDateString('de-DE', {
-                  day: '2-digit', month: '2-digit', year: 'numeric'
-                })}
+                {new Date(projekt.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
               </span>
             </div>
             <div className="flex justify-between">
@@ -110,22 +126,29 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        {/* KI-Zusammenfassung */}
         {projekt.protokoll?.zusammenfassung && (
           <div className="card">
-            <h2 className="font-semibold text-zinc-900 mb-2 flex items-center gap-2">
-              <span>🏠</span> KI-Zusammenfassung
-            </h2>
+            <h2 className="font-semibold text-zinc-900 mb-2">🏠 KI-Zusammenfassung</h2>
             <p className="text-sm text-zinc-600 leading-relaxed">{projekt.protokoll.zusammenfassung}</p>
           </div>
         )}
 
-        {/* Leistungspositionen */}
+        {projekt.protokoll?.risikohinweise?.length > 0 && (
+          <div className="bg-red-50 rounded-2xl p-4 border border-red-100">
+            <p className="text-sm font-semibold text-red-700 mb-2">⚠️ Risikohinweise</p>
+            <ul className="space-y-1">
+              {projekt.protokoll.risikohinweise.map((h, i) => (
+                <li key={i} className="text-xs text-red-600">• {h}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {positionen.length > 0 && (
           <div>
             <h2 className="font-semibold text-zinc-900 mb-3">Leistungsverzeichnis</h2>
             <div className="space-y-3">
-              {positionen.map((kategorie) => (
+              {projekt.protokoll.positionen.map((kategorie) => (
                 <div key={kategorie.kategorie} className="card">
                   <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3">
                     {kategorie.kategorie}
@@ -152,17 +175,14 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        {/* Summe */}
         {netto > 0 && (
           <div className="card border-2 border-brand-100">
             <div className="space-y-2">
               <div className="flex justify-between text-sm text-zinc-600">
-                <span>Nettobetrag</span>
-                <span>{netto.toLocaleString('de-DE')} €</span>
+                <span>Nettobetrag</span><span>{netto.toLocaleString('de-DE')} €</span>
               </div>
               <div className="flex justify-between text-sm text-zinc-600">
-                <span>MwSt. 19%</span>
-                <span>{mwst.toLocaleString('de-DE', { maximumFractionDigits: 0 })} €</span>
+                <span>MwSt. 19%</span><span>{mwst.toLocaleString('de-DE', { maximumFractionDigits: 0 })} €</span>
               </div>
               <div className="border-t border-zinc-200 pt-2 flex justify-between font-bold text-zinc-900">
                 <span>Gesamtbetrag</span>
@@ -172,11 +192,10 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        {/* Hinweis wenn Positionen da */}
         {positionen.length > 0 && (
           <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
             <p className="text-xs text-amber-700">
-              <strong>Vor der Freigabe prüfen:</strong> Mengen, Preise und Positionen sind KI-Vorschläge — bitte auf Vollständigkeit prüfen.
+              <strong>Vor der Freigabe prüfen:</strong> Mengen, Preise und Positionen sind KI-Vorschläge.
             </p>
           </div>
         )}

@@ -1,15 +1,15 @@
 /**
- * PDF Export — direkt im Browser mit HTML + Print
- * Kein Backend nötig
+ * PDF Export — direkt im Browser mit html2pdf
  */
 
-export function exportPDF(projekt, positionen, profil, anmerkung = '') {
+export async function exportPDF(projekt, positionen, profil, anmerkung = '') {
   const netto = positionen.reduce((sum, p) => sum + (parseFloat(p.menge) * parseFloat(p.ep) || 0), 0)
   const mwst = netto * 0.19
   const brutto = netto + mwst
 
   const datum = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const angebotNr = `AN-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`
+  const gueltigBis = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('de-DE')
 
   const html = `
 <!DOCTYPE html>
@@ -18,7 +18,7 @@ export function exportPDF(projekt, positionen, profil, anmerkung = '') {
 <meta charset="UTF-8">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 10pt; color: #1a1a1a; padding: 2cm; }
+  body { font-family: Arial, sans-serif; font-size: 10pt; color: #1a1a1a; }
   
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24pt; padding-bottom: 16pt; border-bottom: 3px solid #e63c22; }
   .logo { font-size: 20pt; font-weight: 700; color: #e63c22; }
@@ -45,8 +45,8 @@ export function exportPDF(projekt, positionen, profil, anmerkung = '') {
   .summen-row.total { border-top: 2px solid #1a1a2e; border-bottom: none; font-weight: 700; font-size: 12pt; padding-top: 8pt; color: #e63c22; }
   
   .anmerkung { background: #fffbf0; border-left: 3px solid #f59e0b; padding: 8pt 12pt; margin-bottom: 16pt; font-size: 9pt; }
-  .hinweis { font-size: 8pt; color: #999; margin-bottom: 16pt; background: #f0f9ff; border: 1px solid #bae6fd; padding: 8pt; border-radius: 4pt; }
-  .footer { border-top: 1px solid #eee; padding-top: 10pt; font-size: 8pt; color: #999; text-align: center; }
+  .hinweis { font-size: 8pt; color: #0369a1; margin-bottom: 16pt; background: #f0f9ff; border: 1px solid #bae6fd; padding: 8pt; border-radius: 4pt; }
+  .footer { border-top: 1px solid #eee; padding-top: 10pt; font-size: 8pt; color: #999; text-align: center; margin-top: 20pt; }
   
   .unterschrift { display: grid; grid-template-columns: 1fr 1fr; gap: 40pt; margin-top: 40pt; }
   .unterschrift-box { border-top: 1px solid #999; padding-top: 6pt; font-size: 8pt; color: #666; }
@@ -78,7 +78,7 @@ export function exportPDF(projekt, positionen, profil, anmerkung = '') {
     <div class="meta-label">Angebotsdaten</div>
     Angebot Nr.: ${angebotNr}<br>
     Datum: ${datum}<br>
-    Gültig bis: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('de-DE')}
+    Gültig bis: ${gueltigBis}
   </div>
 </div>
 
@@ -86,7 +86,7 @@ export function exportPDF(projekt, positionen, profil, anmerkung = '') {
 <p class="angebot-nr">Angebot Nr. ${angebotNr} · ${datum}</p>
 
 <div class="hinweis">
-  ℹ️ Dieses Angebot wurde mit Unterstützung von KI erstellt und vom Dachdecker geprüft. Alle Positionen, Mengen und Preise wurden freigegeben.
+  ℹ️ Dieses Angebot wurde mit Unterstützung von KI erstellt und vom Dachdecker geprüft.
 </div>
 
 <table>
@@ -109,8 +109,7 @@ export function exportPDF(projekt, positionen, profil, anmerkung = '') {
       <td class="right">${pos.einheit}</td>
       <td class="right">${parseFloat(pos.ep).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</td>
       <td class="right"><strong>${(parseFloat(pos.menge) * parseFloat(pos.ep)).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</strong></td>
-    </tr>
-    `).join('')}
+    </tr>`).join('')}
   </tbody>
 </table>
 
@@ -134,12 +133,20 @@ ${anmerkung ? `<div class="anmerkung"><strong>Anmerkungen:</strong><br>${anmerku
 </body>
 </html>`
 
-  // Neues Fenster öffnen und drucken
-  const win = window.open('', '_blank')
-  win.document.write(html)
-  win.document.close()
-  win.focus()
-  setTimeout(() => {
-    win.print()
-  }, 500)
+  // Als PDF herunterladen via Blob
+  const { default: html2pdf } = await import('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js')
+  
+  const element = document.createElement('div')
+  element.innerHTML = html
+  document.body.appendChild(element)
+
+  await html2pdf().set({
+    margin: [15, 20, 15, 20],
+    filename: `Angebot_${projekt.kunde.replace(/\s+/g, '_')}_${datum.replace(/\./g, '-')}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  }).from(element).save()
+
+  document.body.removeChild(element)
 }

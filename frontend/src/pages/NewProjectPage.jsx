@@ -171,11 +171,11 @@ export default function NewProjectPage() {
             <div className="space-y-4">
               <div>
                 <label className="label">Kundenname</label>
-                <input type="text" value={kunde} onChange={(e) => setKunde(e.target.value)} placeholder="z.B. Familie Müller" className="input" />
+                <input type="text" value={kunde} onChange={(e) => setKunde(e.target.value)} placeholder="z.B. Familie Müller" className="input" autoComplete="name" />
               </div>
               <div>
                 <label className="label">Adresse der Baustelle</label>
-                <input type="text" value={adresse} onChange={(e) => setAdresse(e.target.value)} placeholder="z.B. Hauptstr. 12, 80331 München" className="input" />
+                <input type="text" value={adresse} onChange={(e) => setAdresse(e.target.value)} placeholder="z.B. Hauptstr. 12, 80331 München" className="input" autoComplete="street-address" />
               </div>
             </div>
 
