@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, FileText, Clock, CheckCircle } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../utils/supabase'
+import { ladePreise } from '../utils/preise_service'
 
 const STATUS_CONFIG = {
   entwurf:     { label: 'Entwurf',          color: 'bg-amber-100 text-amber-700',  icon: Clock },
@@ -15,17 +16,19 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const [projekte, setProjekte] = useState([])
   const [loading, setLoading] = useState(true)
+  const [anzahlPreise, setAnzahlPreise] = useState(0)
 
   useEffect(() => {
     if (!user) return
 
     async function ladeProjekte() {
-      const { data, error } = await supabase
-        .from('projekte')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const [{ data, error }, preise] = await Promise.all([
+        supabase.from('projekte').select('*').order('created_at', { ascending: false }),
+        ladePreise(user.id)
+      ])
 
       if (!error) setProjekte(data || [])
+      setAnzahlPreise(preise.length)
       setLoading(false)
     }
 
@@ -64,6 +67,17 @@ export default function DashboardPage() {
           <div className="text-brand-100 text-sm">Fotos + Sprachnotiz aufnehmen</div>
         </div>
       </button>
+
+      {/* KI-Status */}
+      {anzahlPreise > 0 && (
+        <div className="bg-green-50 border border-green-100 rounded-xl px-4 py-3 mb-2 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-green-700">🧠 KI kennt deine Preise</p>
+            <p className="text-xs text-green-600">{anzahlPreise} Positionen gespeichert</p>
+          </div>
+          <div className="text-2xl font-bold text-green-600">{anzahlPreise}</div>
+        </div>
+      )}
 
       {/* Projektliste */}
       {loading ? (

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Plus, Trash2, Download, Loader2, FileText } from 'lucide-react'
 import { supabase } from '../utils/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { speicherePreis } from '../utils/preise_service'
 import { exportPDF } from '../utils/pdf_export'
 
 export default function OfferPage() {
@@ -80,7 +81,16 @@ export default function OfferPage() {
       .from('projekte')
       .update({ protokoll: updatedProtokoll, status: 'bearbeitet' })
       .eq('id', id)
-    if (!error) setSaved(true)
+
+    if (!error) {
+      setSaved(true)
+      // Preise lernen — jede Position mit Preis speichern
+      for (const pos of positionen) {
+        if (pos.bezeichnung && parseFloat(pos.ep) > 0) {
+          await speicherePreis(user.id, pos.bezeichnung, pos.einheit, parseFloat(pos.ep))
+        }
+      }
+    }
     setSaving(false)
   }
 

@@ -1,6 +1,5 @@
 /**
- * Claude API Service — Anthropic
- * Direkt im Frontend via fetch (kein Backend nötig)
+ * Claude API Service
  */
 
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
@@ -12,23 +11,23 @@ Aus Fotos einer Besichtigung und einer kurzen Beschreibung erstellst du ein stru
 
 WICHTIGE REGELN:
 - Verwende deutsche Fachterminologie (Biberschwanz, Ortgang, First, Traufe, Kehle, etc.)
-- Einheitspreise orientieren sich an aktuellen deutschen Marktpreisen (netto, ohne MwSt.)
-- Typische Einheitspreise zur Orientierung:
-  * Ziegelwechsel: 12-25 €/Stk je nach Typ
-  * Firstziegel neu verlegen: 35-65 €/m
+- Wenn persönliche Preise des Dachdeckers angegeben sind, verwende IMMER diese — nie die Marktpreise
+- Wenn keine persönlichen Preise vorhanden, orientiere dich an deutschen Marktpreisen (netto):
+  * Ziegelwechsel: 12-25 €/Stk
+  * Firstziegel: 35-65 €/m
   * Dachrinne Titanzink: 40-75 €/m
-  * Ortgangblech Titanzink: 25-50 €/m
+  * Ortgangblech: 25-50 €/m
   * Gerüststellung: 600-1200 € pauschal
   * Anfahrt: 60-120 € pauschal
-- Wenn etwas unklar ist, markiere es mit [?]
 - Antworte NUR als JSON, kein Markdown, keine Erklärungen`
 
-function buildPrompt(kunde, adresse, notiz) {
+function buildPrompt(kunde, adresse, notiz, preiseText) {
   return `Analysiere diese Fotos einer Dachbesichtigung und erstelle ein Baustellenprotokoll.
 
 Kunde: ${kunde}
 Adresse: ${adresse}
 Notiz des Dachdeckers: "${notiz || 'Keine Notiz'}"
+${preiseText}
 
 Antworte NUR mit diesem JSON (keine Backticks, kein Markdown):
 {
@@ -63,27 +62,18 @@ async function imageToBase64(file) {
   })
 }
 
-export async function analysiereBestellung(fotos, kunde, adresse, notiz) {
+export async function analysiereBestellung(fotos, kunde, adresse, notiz, preiseText = '') {
   const content = []
 
-  // Fotos hinzufügen
   for (const foto of fotos.slice(0, 5)) {
     const base64 = await imageToBase64(foto.file)
     content.push({
       type: 'image',
-      source: {
-        type: 'base64',
-        media_type: foto.file.type || 'image/jpeg',
-        data: base64,
-      }
+      source: { type: 'base64', media_type: foto.file.type || 'image/jpeg', data: base64 }
     })
   }
 
-  // Text-Prompt
-  content.push({
-    type: 'text',
-    text: buildPrompt(kunde, adresse, notiz)
-  })
+  content.push({ type: 'text', text: buildPrompt(kunde, adresse, notiz, preiseText) })
 
   const response = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -97,9 +87,7 @@ export async function analysiereBestellung(fotos, kunde, adresse, notiz) {
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
-      messages: [
-        { role: 'user', content }
-      ],
+      messages: [{ role: 'user', content }],
     })
   })
 
@@ -110,8 +98,8 @@ export async function analysiereBestellung(fotos, kunde, adresse, notiz) {
 
   const data = await response.json()
   const rawText = data.content?.[0]?.text || ''
-
   const clean = rawText.replace(/```json|```/g, '').trim()
+
   try {
     return JSON.parse(clean)
   } catch {

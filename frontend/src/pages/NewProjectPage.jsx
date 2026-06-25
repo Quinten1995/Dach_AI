@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 import { supabase } from '../utils/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { analysiereBestellung } from '../utils/gemini_service'
+import { ladePreise, preiseAlsPromptText } from '../utils/preise_service'
 
 const MAX_PHOTOS = 5
 const MAX_SECONDS = 90
@@ -117,7 +118,9 @@ export default function NewProjectPage() {
 
     try {
       setAnalyseStatus('🔍 Fotos werden analysiert…')
-      const protokoll = await analysiereBestellung(photos, kunde, adresse, notiz)
+      const preise = await ladePreise(user.id)
+      const preiseText = preiseAlsPromptText(preise)
+      const protokoll = await analysiereBestellung(photos, kunde, adresse, notiz, preiseText)
 
       setAnalyseStatus('💾 Wird gespeichert…')
       const { data: projekt, error: projektError } = await supabase
