@@ -85,10 +85,14 @@ export default function OfferPage() {
     if (!error) {
       setSaved(true)
       // Preise lernen — jede Position mit Preis speichern
-      for (const pos of positionen) {
-        if (pos.bezeichnung && parseFloat(pos.ep) > 0) {
-          await speicherePreis(user.id, pos.bezeichnung, pos.einheit, parseFloat(pos.ep))
+      try {
+        for (const pos of positionen) {
+          if (pos.bezeichnung && parseFloat(pos.ep) > 0) {
+            await speicherePreis(user.id, pos.bezeichnung, pos.einheit, parseFloat(pos.ep))
+          }
         }
+      } catch (e) {
+        console.error('Preise speichern fehlgeschlagen:', e)
       }
     }
     setSaving(false)
